@@ -47,8 +47,7 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <time.h>
-
-#include <globus_common.h>
+#include <netdb.h>
 
 #include "config.h"
 #include "misc.h"
@@ -61,37 +60,68 @@
 char *
 GetRealHostName(char * host)
 {
-	struct hostent *hp, h, hn;
-	char buffer[512];
-	char buffer2[512];
-	struct in_addr addr;
+	struct addrinfo ai_req, *ai_ans, *cur_ans;
+	char *ret = NULL, *newret;
+	int retalloc = 0;
+	const int retinc = 128;
+	const int retmax = 4096;
 	int err;
 
-	hp = globus_libc_gethostbyname_r(
-	        host, &h, buffer,
-	        512,
-	        &err);
+	ai_req.ai_flags = 0;
+	ai_req.ai_family = AF_UNSPEC;
+	ai_req.ai_socktype = SOCK_STREAM;
+	ai_req.ai_protocol = 0; 
 
+	err = getaddrinfo(host, NULL, &ai_req, &ai_ans);
 	/* cant lookup, no need to continue */
-	if (hp == GLOBUS_NULL)
+        if (err != 0 || ai_ans == NULL) 
 		return NULL;
 
-	memcpy(&addr.s_addr, h.h_addr, sizeof(struct in_addr));
+	ret = (char *)malloc(retinc);
+	if (ret == NULL) return NULL;
+	else retalloc = retinc;
 
-	/* can skip localhost, globus does a local hostname lookup already */
-	if (ntohl(addr.s_addr) == INADDR_LOOPBACK)
-		return NULL;
+	/* scan getaddrinfo result */
+	for (cur_ans = ai_ans; cur_ans != NULL; cur_ans = cur_ans->ai_next)
+	{
+		/* can skip localhost, globus does a local hostname lookup already */
+		switch(cur_ans->ai_family)
+		{
+      		 case AF_INET:
+			/* IPv4 */
+        		if(*(uint8_t *) &((struct sockaddr_in *)cur_ans->ai_addr)->sin_addr.s_addr == 127)
+				continue;
+        		break;
+		 case AF_INET6:
+			if(IN6_IS_ADDR_LOOPBACK(&((struct sockaddr_in6 *)cur_ans->ai_addr)->sin6_addr) ||
+				(IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6 *)cur_ans->ai_addr)->sin6_addr) &&
+				*(uint8_t *) &((struct sockaddr_in6 *)cur_ans->ai_addr)->sin6_addr.s6_addr[12] == 127))
+				continue;
+			break;
+		 default:
+			break;
+		}
+		if ((err = getnameinfo(cur_ans->ai_addr, cur_ans->ai_addrlen,
+				ret, retalloc, NULL, 0, NI_NAMEREQD)) == 0)
+		{
+			freeaddrinfo(ai_ans);
+			return ret;
+		} else {
+			if (err == EAI_OVERFLOW)
+			{
+				/* Increase hostname buffer size */
+				if ((retalloc + retinc) > retmax) continue;
+				newret = realloc(ret, retalloc + retinc);
+				if (newret == NULL) continue;
+				ret = newret;
+				retalloc += retinc;
+			}
+		}
+	}
 
-	hp = globus_libc_gethostbyaddr_r(
-	        (char *) &addr, h.h_length, h.h_addrtype,
-	        &hn, buffer2, 512,
-	        &err);
-
-	/* cant do reverse lookup. ignore */
-	if (hp == GLOBUS_NULL)
-		return NULL;
-
-	return strdup(hp->h_name);
+	if (ret != NULL) free(ret);
+	freeaddrinfo(ai_ans);
+	return NULL;
 }
 
 char *

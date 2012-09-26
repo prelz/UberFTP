@@ -88,24 +88,29 @@ net_connected(nh_t * nh)
 }
 
 errcode_t
-net_connect(nh_t ** nhp,  struct sockaddr_in * sin)
+net_connect(nh_t ** nhp,  struct sockaddr * sin, socklen_t sin_len)
 {
 	int             rval   = 0;
 	int             flags  = 0;
 	int             wsize  = 0;
 	nh_t          * nh     = NULL;
 	errcode_t       ec     = EC_SUCCESS;
-	unsigned short  port   = 0;
 	unsigned short  minsrc = s_minsrc();
 	unsigned short  maxsrc = s_maxsrc();
-	char cname[INET_ADDRSTRLEN];
-	struct sockaddr_in bindsin;
+	char cname[INET6_ADDRSTRLEN];
+	struct sockaddr_storage bindsinst;
+	struct sockaddr_in  *bindsin4;
+	struct sockaddr_in6 *bindsin6;
+	void	      * addr;
+	in_port_t	port;
 
 	nh = *nhp = (nh_t *) malloc(sizeof(nh_t));
 
 	memset(nh, 0, sizeof(nh_t));
 
-	nh->fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sin->sa_family == AF_INET6)
+		nh->fd = socket(PF_INET6, SOCK_STREAM, 0);
+	else	nh->fd = socket(PF_INET , SOCK_STREAM, 0);
 	if (nh->fd == -1)
 	{
 		ec = ec_create(EC_GSI_SUCCESS,
@@ -156,13 +161,30 @@ net_connect(nh_t ** nhp,  struct sockaddr_in * sin)
 
 	if (minsrc || maxsrc)
 	{
-		memset(&bindsin, 0, sizeof(struct sockaddr_in));
-		bindsin.sin_family = AF_INET;
-		bindsin.sin_addr.s_addr = INADDR_ANY;
+		memset(&bindsinst, 0, sizeof(struct sockaddr_storage));
+		bindsin4 = (struct sockaddr_in *)&bindsinst;
+		bindsin6 = (struct sockaddr_in6 *)&bindsinst;
+		bindsinst.ss_family = AF_INET;
+		switch(sin->sa_family)
+		{
+		 case AF_INET:
+			bindsin4->sin_addr.s_addr = INADDR_ANY;
+			break;
+		 case AF_INET6:
+			bindsin6->sin6_addr = in6addr_any;
+			break;
+		 default:
+			break;
+		}
+
 		for (port = minsrc; port <= maxsrc; port++)
 		{
-			bindsin.sin_port = htons(port);
-			rval = bind(nh->fd, (struct sockaddr *)&bindsin, sizeof(bindsin));
+			if (bindsinst.ss_family == AF_INET) 
+				bindsin4->sin_port = htons(port);
+			else if (bindsinst.ss_family == AF_INET6)
+				bindsin6->sin6_port = htons(port);
+
+			rval = bind(nh->fd, (struct sockaddr *)&bindsinst, sin_len);
 			if (!rval)
 				break;
 
@@ -192,17 +214,29 @@ net_connect(nh_t ** nhp,  struct sockaddr_in * sin)
 		}
 	}
 
-	rval = connect(nh->fd, 
-	               (struct sockaddr *)sin, 
-	               sizeof(struct sockaddr_in));
+	rval = connect(nh->fd, sin, sin_len);
 	if (rval && errno != EINPROGRESS)
 	{
+		switch(sin->sa_family)
+		{
+		 case AF_INET:
+			addr = (void *)(&(((struct sockaddr_in *)(sin))->sin_addr));
+			port = ntohs(((struct sockaddr_in *)(sin))->sin_port);
+			break;
+		 case AF_INET6:
+			addr = (void *)(&(((struct sockaddr_in6 *)(sin))->sin6_addr));
+			port = ntohs(((struct sockaddr_in6 *)(sin))->sin6_port);
+			break;
+		 default:
+			addr = NULL;
+			port = 0;
+		}
 		ec = ec_create(
 		             EC_GSI_SUCCESS,
 		             EC_GSI_SUCCESS,
 		             "Failed to connect to %s port %d: %s",
-		             inet_ntop(AF_INET, &sin->sin_addr, cname, INET_ADDRSTRLEN),
-					 ntohs(sin->sin_port),
+		             inet_ntop(sin->sa_family, addr, cname, sizeof(cname)),
+			     port,
 		             strerror(errno));
 		goto cleanup;
 	}
@@ -224,7 +258,7 @@ cleanup:
 }
 
 errcode_t
-net_listen(nh_t ** nhp, struct sockaddr_in * sin)
+net_listen(nh_t ** nhp, struct sockaddr * sin, socklen_t sin_len)
 {
 	int             rval    = 0;
 	int             flags   = 0;
@@ -234,12 +268,16 @@ net_listen(nh_t ** nhp, struct sockaddr_in * sin)
 	unsigned short  port    = 0;
 	unsigned short  minport = s_minport();
 	unsigned short  maxport = s_maxport();
-	struct sockaddr_in bindsin;
+	struct sockaddr_storage bindsinst;
+	struct sockaddr_in  *bindsin4;
+	struct sockaddr_in6 *bindsin6;
 
 	nh = *nhp = (nh_t *) malloc(sizeof(nh_t));
 	memset(nh, 0, sizeof(nh_t));
 
-	nh->fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (sin->sa_family == AF_INET6)
+		nh->fd = socket(PF_INET6, SOCK_STREAM, 0);
+	else	nh->fd = socket(PF_INET , SOCK_STREAM, 0);
 	if (nh->fd == -1)
 	{
 		ec = ec_create(EC_GSI_SUCCESS,
@@ -290,11 +328,17 @@ net_listen(nh_t ** nhp, struct sockaddr_in * sin)
 
 	if (minport || maxport)
 	{
-		memcpy(&bindsin, sin, sizeof(struct sockaddr_in));
+		memcpy(&bindsinst, sin, sizeof(struct sockaddr_storage));
+		bindsin4 = (struct sockaddr_in *)&bindsinst;
+		bindsin6 = (struct sockaddr_in6 *)&bindsinst;
 		for (port = minport; port <= maxport; port++)
 		{
-			bindsin.sin_port = htons(port);
-			rval = bind(nh->fd, (struct sockaddr *)&bindsin, sizeof(bindsin));
+			if (bindsinst.ss_family == AF_INET) 
+				bindsin4->sin_port = htons(port);
+			else if (bindsinst.ss_family == AF_INET6)
+				bindsin6->sin6_port = htons(port);
+
+			rval = bind(nh->fd, (struct sockaddr *)&bindsinst, sin_len);
 			if (!rval)
 				break;
 
@@ -324,7 +368,7 @@ net_listen(nh_t ** nhp, struct sockaddr_in * sin)
 		}
 	} else
 	{
-		rval = bind(nh->fd, (struct sockaddr*)sin, sizeof(struct sockaddr_in));
+		rval = bind(nh->fd, sin, sin_len);
 		if (rval < 0)
 		{
 			ec = ec_create(EC_GSI_SUCCESS,
@@ -346,7 +390,7 @@ net_listen(nh_t ** nhp, struct sockaddr_in * sin)
 	}
 
 	/* Update the sock structure */
-	ec = net_getsockname(nh, sin);
+	ec = net_getsockname(nh, sin, sin_len);
 
 	nh->state = NET_STATE_LISTENING;
 cleanup:
@@ -553,12 +597,11 @@ net_poll(nh_t * nh, int * read, int * write, int timeout)
 }
 
 errcode_t
-net_getsockname(nh_t * nh, struct sockaddr_in * sin)
+net_getsockname(nh_t * nh, struct sockaddr * sin, socklen_t sin_len)
 {
 	int rval = 0;
-	socklen_t len = sizeof(struct sockaddr_in);
 
-	rval = getsockname(nh->fd, (struct sockaddr*)sin, &len);
+	rval = getsockname(nh->fd, sin, &sin_len);
 	if (rval < 0)
 		return ec_create(EC_GSI_SUCCESS,
 		                 EC_GSI_SUCCESS,
@@ -569,35 +612,44 @@ net_getsockname(nh_t * nh, struct sockaddr_in * sin)
 }
 
 errcode_t
-net_translate(char * host, int port, struct sockaddr_in * sin)
+net_getpeername(nh_t * nh, struct sockaddr * sin, socklen_t sin_len)
+{
+	int rval = 0;
+
+	rval = getpeername(nh->fd, sin, &sin_len);
+	if (rval < 0)
+		return ec_create(EC_GSI_SUCCESS,
+		                 EC_GSI_SUCCESS,
+		                 "getpeername failed: %s",
+		                 strerror(errno));
+
+	return EC_SUCCESS;
+}
+
+errcode_t
+net_translate(char * host, int port, struct addrinfo ** saddr)
 {
 	int rval  = 0;
 	errcode_t ec = EC_SUCCESS;
 	struct addrinfo hints;
-	struct addrinfo * res = NULL;
+	char cport[8];
 
-    /* Get the connection information. */
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family   = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
+	/* Get the connection information. */
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family   = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
 
-	rval = getaddrinfo(host, NULL, &hints, &res);
-	if (rval)
+	snprintf(cport, sizeof(cport), "%5.5d", port);
+
+	rval = getaddrinfo(host, cport, &hints, saddr);
+	if (rval || (*saddr == NULL))
 	{
 		ec = ec_create(EC_GSI_SUCCESS,
 		               EC_GSI_SUCCESS,
 		               "Could not resolve the IP address for %s: %s",
 		               host,
 		               gai_strerror(rval));
-		goto cleanup;
 	}
-
-	memcpy(sin, res->ai_addr, sizeof(struct sockaddr_in));
-	sin->sin_port = htons(port);
-
-cleanup:
-	if (res)
-		freeaddrinfo(res);
 
 	return ec;
 }
