@@ -129,7 +129,7 @@ net_connect(nh_t ** nhp,  struct sockaddr * sin, socklen_t sin_len)
 	struct sockaddr_in  *bindsin4;
 	struct sockaddr_in6 *bindsin6;
 	void	      * addr;
-	in_port_t	port;
+	in_port_t	port=0;
 
 	/* Get our net handle pointer. */
 	nh = *nhp = (nh_t *) malloc(sizeof(nh_t));
@@ -234,7 +234,7 @@ net_connect(nh_t ** nhp,  struct sockaddr * sin, socklen_t sin_len)
 		/* Connect. */
 		rval = connect(nh->fd, 
 		               (struct sockaddr *)sin, 
-		               sizeof(struct sockaddr_in));
+		               sin_len);
 
 		if (rval && errno != EINPROGRESS)
 		{
