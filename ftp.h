@@ -1,7 +1,7 @@
 /*
  * University of Illinois/NCSA Open Source License
  *
- * Copyright © 2003-2010 NCSA.  All rights reserved.
+ * Copyright © 2003-2012 NCSA.  All rights reserved.
  *
  * Developed by:
  *
@@ -76,7 +76,7 @@ struct _dch_ {
 	dci_t    dci;
 	int      pbsz; /* Protection buffer size */
 	int      dcau; /* 0 no, 1 yes. */ /* Use s_dcau() for settings. */
-	globus_off_t off;
+	globus_off_t partial_off;
 };
 
 #endif /* UBER_FTP_H */

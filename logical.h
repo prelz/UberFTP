@@ -1,7 +1,7 @@
 /*
  * University of Illinois/NCSA Open Source License
  *
- * Copyright © 2003-2010 NCSA.  All rights reserved.
+ * Copyright © 2003-2012 NCSA.  All rights reserved.
  *
  * Developed by:
  *
@@ -41,6 +41,9 @@
 #ifndef UBER_LOGICAL_H
 #define UBER_LOGICAL_H
 
+#include <sys/types.h>
+#include <time.h>
+
 #include <globus_common.h>
 #include "linterface.h"
 #include "errcode.h"
@@ -63,12 +66,14 @@ errcode_t l_disconnect(lh_t, char ** msg);
 errcode_t l_retrvfile(lh_t, lh_t, char *, globus_off_t, globus_off_t);
 errcode_t l_storfile(lh_t, lh_t, char *, int, globus_off_t, globus_off_t);
 errcode_t l_appefile(lh_t);
-errcode_t l_read(lh_t, 
+errcode_t l_read(lh_t,  /* Logical handle to read. */
+                 lh_t,  /* Other logical handle. */
                  char          ** buf, 
                  globus_off_t  *, 
                  size_t         *, 
                  int           * eof);
-errcode_t l_write(lh_t,
+errcode_t l_write(lh_t, /* logical handle to write. */
+                  lh_t, /* Other logical handle. */
                   char          * buf,
                   globus_off_t    off,
                   size_t          len,
@@ -100,6 +105,11 @@ errcode_t l_size(lh_t, char * path, globus_off_t * size);
 errcode_t l_expand_tilde(lh_t, char * path, char ** fullpath);
 errcode_t l_stage(lh_t, char * path, int * staged);
 errcode_t l_cksum(lh_t, char * file, int * supported, unsigned int * crc);
+errcode_t l_link(lh_t, char * oldfile, char * newfile);
+errcode_t l_symlink(lh_t, char * oldfile, char * newfile);
+errcode_t l_utime(lh_t, char * path, time_t timestamp);
+errcode_t l_lscos(lh_t, char **);
+errcode_t l_lsfam(lh_t, char **);
 #ifdef SYSLOG_PERF
 char * l_rhost(lh_t);
 #endif /* SYSLOG_PERF */

@@ -1,7 +1,7 @@
 /*
  * University of Illinois/NCSA Open Source License
  *
- * Copyright © 2003-2010 NCSA.  All rights reserved.
+ * Copyright © 2003-2012 NCSA.  All rights reserved.
  *
  * Developed by:
  *
@@ -208,7 +208,7 @@ _f_a_read(dch_t         * dch,
 		(*len)--;
 	}
 
-	*off = dc->off + dch->off;
+	*off = dc->off + dch->partial_off;
 	dc->off += *len;
 
 	return ec;

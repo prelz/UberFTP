@@ -1,7 +1,7 @@
 /*
  * University of Illinois/NCSA Open Source License
  *
- * Copyright © 2003-2010 NCSA.  All rights reserved.
+ * Copyright © 2003-2012 NCSA.  All rights reserved.
  *
  * Developed by:
  *
@@ -38,7 +38,9 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS WITH THE SOFTWARE.
  */
+#include <sys/types.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "linterface.h"
 #include "logical.h"
@@ -52,7 +54,7 @@
 
 struct logical_handle {
 	Linterface_t li;
-	Linterface_t li_uc;
+	Linterface_t li_uc; /* unconnected interface */
 	pd_t privdata;
 };
 
@@ -149,30 +151,34 @@ l_appefile(lh_t);
 
 errcode_t
 l_read(lh_t lh, 
+       lh_t olh,
        char          ** buf, 
        globus_off_t  *  off,
        size_t        *  len,
        int           *  eof)
 {
-	return lh->li.read(&lh->privdata,
-	                    buf,
-	                    off,
-	                    len,
-	                    eof);
+	pd_t * opd = NULL;
+
+	if (olh)
+		opd = &olh->privdata;
+
+	return lh->li.read(&lh->privdata, opd, buf, off, len, eof);
 }
 
 errcode_t
 l_write(lh_t lh,
+        lh_t olh,
         char          * buf,
         globus_off_t    off,
         size_t          len,
         int             eof)
 {
-	return lh->li.write(&lh->privdata,
-	                    buf,
-	                    off,
-	                    len,
-	                    eof);
+	pd_t * opd = NULL;
+
+	if (olh)
+		opd = &olh->privdata;
+
+	return lh->li.write(&lh->privdata, opd, buf, off, len, eof);
 }
 
 errcode_t
@@ -282,6 +288,36 @@ errcode_t
 l_cksum(lh_t lh, char * file, int * supported, unsigned int * crc)
 {
 	return lh->li.cksum(&lh->privdata, file, supported, crc);
+}
+
+errcode_t
+l_link(lh_t lh, char * oldfile, char * newfile)
+{
+	return lh->li.link(&lh->privdata, oldfile, newfile);
+}
+
+errcode_t
+l_symlink(lh_t lh, char * oldfile, char * newfile)
+{
+	return lh->li.symlink(&lh->privdata, oldfile, newfile);
+}
+
+errcode_t
+l_utime(lh_t lh, char * path, time_t timestamp)
+{
+	return lh->li.utime(&lh->privdata, path, timestamp);
+}
+
+errcode_t
+l_lscos(lh_t lh, char ** cos)
+{
+	return lh->li.lscos(&lh->privdata, cos);
+}
+
+errcode_t
+l_lsfam(lh_t lh, char ** families)
+{
+	return lh->li.lsfam(&lh->privdata, families);
 }
 
 #ifdef SYSLOG_PERF

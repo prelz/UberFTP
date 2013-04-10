@@ -1,7 +1,7 @@
 /*
  * University of Illinois/NCSA Open Source License
  *
- * Copyright © 2003-2010 NCSA.  All rights reserved.
+ * Copyright © 2003-2012 NCSA.  All rights reserved.
  *
  * Developed by:
  *
@@ -47,7 +47,13 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <time.h>
-#include <netdb.h>
+
+      #include <sys/socket.h>
+       #include <netinet/in.h>
+       #include <arpa/inet.h>
+
+
+#include <globus_common.h>
 
 #include "config.h"
 #include "misc.h"
@@ -60,69 +66,40 @@
 char *
 GetRealHostName(char * host)
 {
-	struct addrinfo ai_req, *ai_ans, *cur_ans;
-	char *ret = NULL, *newret;
-	int retalloc = 0;
-	const int retinc = 128;
-	const int retmax = 4096;
-	int err;
+	int rc = 0;
+	char name[NI_MAXHOST];
+	struct addrinfo hints;
+	struct addrinfo * res = NULL;
 
-	ai_req.ai_flags = 0;
-	ai_req.ai_family = AF_UNSPEC;
-	ai_req.ai_socktype = SOCK_STREAM;
-	ai_req.ai_protocol = 0; 
-
-	err = getaddrinfo(host, NULL, &ai_req, &ai_ans);
-	/* cant lookup, no need to continue */
-        if (err != 0 || ai_ans == NULL) 
+	if (!host)
 		return NULL;
 
-	ret = (char *)malloc(retinc);
-	if (ret == NULL) return NULL;
-	else retalloc = retinc;
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_flags    = AI_ADDRCONFIG;
+	hints.ai_family   = 0;
+	hints.ai_socktype = 0;
+	hints.ai_protocol = 0;
 
-	/* scan getaddrinfo result */
-	for (cur_ans = ai_ans; cur_ans != NULL; cur_ans = cur_ans->ai_next)
-	{
-		/* can skip localhost, globus does a local hostname lookup already */
-		switch(cur_ans->ai_family)
-		{
-      		 case AF_INET:
-			/* IPv4 */
-        		if(*(uint8_t *) &((struct sockaddr_in *)cur_ans->ai_addr)->sin_addr.s_addr == 127)
-				continue;
-        		break;
-		 case AF_INET6:
-			if(IN6_IS_ADDR_LOOPBACK(&((struct sockaddr_in6 *)cur_ans->ai_addr)->sin6_addr) ||
-				(IN6_IS_ADDR_V4MAPPED(&((struct sockaddr_in6 *)cur_ans->ai_addr)->sin6_addr) &&
-				*(uint8_t *) &((struct sockaddr_in6 *)cur_ans->ai_addr)->sin6_addr.s6_addr[12] == 127))
-				continue;
-			break;
-		 default:
-			break;
-		}
-		if ((err = getnameinfo(cur_ans->ai_addr, cur_ans->ai_addrlen,
-				ret, retalloc, NULL, 0, NI_NAMEREQD)) == 0)
-		{
-			freeaddrinfo(ai_ans);
-			return ret;
-		} else {
-			if (err == EAI_OVERFLOW)
-			{
-				/* Increase hostname buffer size */
-				if ((retalloc + retinc) > retmax) continue;
-				newret = realloc(ret, retalloc + retinc);
-				if (newret == NULL) continue;
-				ret = newret;
-				retalloc += retinc;
-			}
-		}
-	}
+	rc = getaddrinfo(host, NULL, &hints, &res);
 
-	if (ret != NULL) free(ret);
-	freeaddrinfo(ai_ans);
-	return NULL;
+	if (rc)
+		return Strdup(host);
+
+	rc = getnameinfo(res->ai_addr,
+	                 res->ai_addrlen,
+	                 name,
+	                 sizeof(name),
+	                 NULL,
+	                 0,
+	                 NI_NAMEREQD);
+
+	freeaddrinfo(res);
+	if (rc)
+		return Strdup(host);
+
+	return Strdup(name);
 }
+
 
 char *
 Strdup(char * str)
@@ -550,6 +527,57 @@ Strcasestr(char * str, char * pattern)
 	}
 
 	return NULL;
+}
+
+int
+IsLongWithTag(char * str)
+{
+	int pos = 0;
+	int len = 0;
+
+	if (!str)
+		return 0;
+
+	len = strlen(str);
+
+	for (pos = 0; pos < (len - 1); pos++)
+	{
+		if (!isdigit(str[pos]))
+			return 0;
+	}
+
+	if (isdigit(str[pos]) ||
+	   (toupper(str[pos]) == 'K') ||
+	   (toupper(str[pos]) == 'M') ||
+	   (toupper(str[pos]) == 'G') ||
+	   (toupper(str[pos]) == 'T'))
+	{
+		return 1;
+	}
+
+	return 0;
+}
+
+long long
+ConvLongWithTag(char * str)
+{
+	long long  value = 0;
+	int        slen  = 0;
+	int        c     = 0;
+
+	if (!str)
+		return 0;
+
+	value = strtoll(str, NULL, 0);
+	slen  = strlen(str);
+	c     = toupper(str[slen-1]);
+
+	if (c == 'K') return value * 1024;
+	if (c == 'M') return value * 1024 * 1024;
+	if (c == 'G') return value * 1024 * 1024 * 1024;
+	if (c == 'T') return value * 1024 * 1024 * 1024 * 1024;
+
+	return value;
 }
 
 int

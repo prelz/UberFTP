@@ -1,7 +1,7 @@
 /*
  * University of Illinois/NCSA Open Source License
  *
- * Copyright © 2003-2010 NCSA.  All rights reserved.
+ * Copyright © 2003-2012 NCSA.  All rights reserved.
  *
  * Developed by:
  *
@@ -66,18 +66,19 @@ static unsigned short min_src   = 0; /* TCP_SOURCE_RANGE min */
 static unsigned short max_src   = 0; /* TCP_SOURCE_RANGE max */
 static int order     = ORDER_BY_NONE;
 static int parallel  = 1;
-static int pbsz      = 0; /* Default, determined on the fly */
 static int prot      = 0; /* 0 clear, 1 safe, 2 confidential, 3 private */
 static int retry     = 0;
 static int runique   = 0;
 static int stream    = 1;
 static int sunique   = 0;
-static int tcpbuf    = DEFAULT_TCP_BUFFER_SIZE;
 static int waiton    = 0;
-static unsigned int blocksize = DEFAULT_BLKSIZE;
+static long long pbsz      = 0; /* Default, determined on the fly */
+static long long tcpbuf    = DEFAULT_TCP_BUFFER_SIZE;
+static long long blocksize = DEFAULT_BLKSIZE;
 static char * dcau_subject = NULL;
-static char * family = NULL;
-static char * resume = NULL;
+static char * cos          = NULL;
+static char * family       = NULL;
+static char * resume       = NULL;
 
 #ifdef MSSFTP
 static int passive   = 0;
@@ -174,7 +175,7 @@ s_setbinary()
 }
 
 void
-s_setblocksize(unsigned int size)
+s_setblocksize(long long size)
 {
 	blocksize = size;
 	if (size == 0)
@@ -185,6 +186,15 @@ void
 s_setcksum(int on)
 {
 	cksum = on ? 1 : 0;
+}
+
+void
+s_setcos(char * Cos)
+{
+	FREE(cos);
+
+	if (strcasecmp(Cos, "default") != 0)
+		cos = Strdup(Cos);
 }
 
 void
@@ -218,7 +228,9 @@ void
 s_setfamily(char * fam)
 {
 	FREE(family);
-	family = Strdup(fam);
+
+	if (strcasecmp(fam, "default") != 0)
+		family = Strdup(fam);
 }
 
 void
@@ -254,10 +266,10 @@ s_setparallel(int cnt)
 }
 
 void
-s_setpbsz(int len)
+s_setpbsz(long long length)
 {
-	pbsz = len;
-	if (pbsz < 0)
+	pbsz = length;
+	if (pbsz == 0)
 		pbsz = 0;
 }
 
@@ -307,10 +319,10 @@ s_setsunique()
 }
 
 void
-s_settcpbuf(int size)
+s_settcpbuf(long long size)
 {
 	tcpbuf = size;
-	if (size < 0)
+	if (size == 0)
 		tcpbuf = 0;
 }
 
@@ -326,7 +338,7 @@ s_ascii()
 	return !binary;
 }
 
-int
+long long
 s_blocksize()
 {
 	return blocksize;
@@ -336,6 +348,12 @@ int
 s_cksum()
 {
 	return cksum;
+}
+
+char *
+s_cos()
+{
+	return cos;
 }
 
 int
@@ -422,7 +440,7 @@ s_parallel()
 	return parallel;
 }
 
-int
+long long
 s_pbsz()
 {
 	return pbsz;
@@ -470,7 +488,7 @@ s_sunique()
 	return sunique;
 }
 
-int
+long long
 s_tcpbuf()
 {
 	return tcpbuf;

@@ -1,7 +1,7 @@
 /*
  * University of Illinois/NCSA Open Source License
  *
- * Copyright © 2003-2010 NCSA.  All rights reserved.
+ * Copyright © 2003-2012 NCSA.  All rights reserved.
  *
  * Developed by:
  *
@@ -73,6 +73,9 @@ net_write(nh_t * nh, char * buf, size_t count);
 
 errcode_t
 net_write_nb(nh_t * nh, char * buf, size_t * count);
+
+errcode_t
+net_wait(nh_t * nh1, nh_t * nh2, int timeout);
 
 errcode_t
 net_poll(nh_t * nh, int * read, int * write, int timeout);
