@@ -2662,8 +2662,16 @@ _f_get_resp(fh_t * fh, int * code, char ** resp)
 				break;
 		}
 
+		/* If we are trying to get a response but the server has already
+		 * closed the connection...
+		 */
 		if (fh->cc.eof)
-			break;
+		{
+			return ec_create(EC_GSI_SUCCESS,
+			                 EC_GSI_SUCCESS,
+			                 "Remote server has disconnected");
+		}
+
 
 		if ((fh->cc.cnt + s_blocksize()) > fh->cc.len)
 		{
@@ -3013,6 +3021,7 @@ _f_setup_spor(fh_t * fh, fh_t * ofh)
 	int       scnt = 1;
 	char    * cmd  = NULL;
 	char    * resp = NULL;
+	char    * addr = NULL;
 	char    * extaddr;
 	struct sockaddr_storage   sin;
 	struct sockaddr * sinp = NULL;
@@ -3039,17 +3048,19 @@ _f_setup_spor(fh_t * fh, fh_t * ofh)
 		sinp = (struct sockaddr *)&sin;
 	}
 
+	cmd = Strdup("SPOR");
+
 	for (i = 0; i < scnt; i++)
 	{
 		if (sinp[i].sa_family == AF_INET6) 
 		{
 			/* SPOR supports both old and new address syntaxes */
 			extaddr = _f_rfc2428_extaddr((struct sockaddr *)&sinp[i]);
-			cmd = Sprintf(cmd, "SPOR %s", extaddr);
+			addr = Sprintf(addr, " %s", extaddr);
 			FREE(extaddr);
 		} else {
-			cmd = Sprintf(cmd, 
-		             "SPOR %d,%d,%d,%d,%d,%d",
+			addr = Sprintf(addr, 
+		             " %d,%d,%d,%d,%d,%d",
 		             (ntohl(((struct sockaddr_in *)&sinp[i])->sin_addr.s_addr) >> 24) & 0xFF,
 		             (ntohl(((struct sockaddr_in *)&sinp[i])->sin_addr.s_addr) >> 16) & 0xFF,
 		             (ntohl(((struct sockaddr_in *)&sinp[i])->sin_addr.s_addr) >>  8) & 0xFF,
@@ -3057,7 +3068,12 @@ _f_setup_spor(fh_t * fh, fh_t * ofh)
 		             (ntohs(((struct sockaddr_in *)&sinp[i])->sin_port) >> 8) & 0xFF,
 		             (ntohs(((struct sockaddr_in *)&sinp[i])->sin_port) >> 0) & 0xFF);
 		}
+
+		cmd = Strcat(cmd, addr);
+
 	}
+
+	FREE(addr);
 
 	ec = _f_send_cmd(fh, cmd);
 	FREE(cmd);
